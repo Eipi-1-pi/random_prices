@@ -1,3 +1,4 @@
+<!-- File: User.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -31,25 +32,43 @@
     
     <!-- Generate Price Button -->
     <div id="inputSection">
-      <button onclick="generateFinalPrice()" class="spin-btn">Generate Price</button>
+      <button type="button" onclick="generateInitialPrice()" class="spin-btn">Generate Price</button>
     </div>
     
     <!-- Animation Section -->
     <div id="animationSection" class="animation-section" style="display: none;">
-      <h3>Choosing Multiplier...</h3>
-      <div class="multipliers-animation">
-        <div id="multipliersList" class="multipliers-list">
-          <!-- Multipliers will be dynamically loaded here for animation -->
-        </div>
-        <div id="highlight" class="highlight"></div>
-      </div>
+      <h3>Calculating...</h3>
+      <div class="loader"></div> <!-- Simple loader animation -->
+    </div>
+    
+    <!-- Offer Selection Section -->
+    <div id="offerSelectionSection" class="offer-selection-section" style="display: none;">
+      <h3>Select Your Preferred Offer</h3>
+      <form id="offerForm">
+        <table id="offersTable">
+          <thead>
+            <tr>
+              <th>Select</th>
+              <th>Offer Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Offer options will be dynamically loaded here -->
+          </tbody>
+        </table>
+        <button type="button" onclick="applySelectedOffer()" class="apply-btn">Apply Offer</button>
+      </form>
     </div>
     
     <!-- Result Section -->
     <div id="resultSection" class="result-section" style="display: none;">
       <h3>Amount to Pay:</h3>
       <p><strong>Total Final Price:</strong> $<span id="totalFinalPrice"></span></p>
+      <p><strong>Bonus Bottles:</strong> <span id="bonusBottles"></span></p>
     </div>
+    
+    <!-- Feedback Messages -->
+    <div class="message" id="message" style="display: none;"></div>
     
     <!-- Admin Modal -->
     <div id="adminModal" class="modal">
@@ -66,31 +85,10 @@
         
         <!-- Settings Section -->
         <div id="settingsSection" style="display: none;">
-          <h3>Configure Multipliers and Probabilities</h3>
-          
-          <!-- Multipliers Table -->
-          <table id="multipliersTable" class="multipliers-table">
-            <thead>
-              <tr>
-                <th>Multiplier</th>
-                <th>Probability (%)</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Multipliers will be dynamically loaded here -->
-            </tbody>
-          </table>
-          
-          <!-- Add Row Button -->
-          <button onclick="addMultiplierRow()" class="admin-btn">Add Multiplier</button>
-          
-          <!-- Save Multipliers Button -->
-          <button onclick="saveMultipliers()" class="admin-btn">Save Multipliers</button>
-          
           <h3>Configure Sales Options</h3>
           
           <!-- Sales Options Table -->
+          <button onclick="addSalesOptionRowAdmin()" class="add-btn">Add Sales Option</button>
           <table id="salesOptionsTableAdmin" class="sales-options-table">
             <thead>
               <tr>
@@ -106,32 +104,122 @@
             </tbody>
           </table>
           
-          <!-- Add Row Button -->
-          <button onclick="addSalesOptionRowAdmin()" class="admin-btn">Add Sales Option</button>
-          
           <!-- Save Sales Options Button -->
           <button onclick="saveSalesOptions()" class="admin-btn">Save Sales Options</button>
           
           <!-- Success Message -->
-          <p id="successMessage" class="success-message" style="display: none;">Settings saved successfully!</p>
+          <p id="successMessage" class="success-message" style="display: none;">Sales Options saved successfully!</p>
         </div>
+        
+        <!-- Unlock Section -->
+        <div id="unlockSection" style="display: none; margin-top: 30px;">
+          <h3>Unlock a User</h3>
+          <input type="text" id="unlockUserId" placeholder="Enter User ID to Unlock" />
+          <button onclick="adminUnlockUser()" class="admin-btn">Unlock</button>
+          <p id="unlockError" class="error-message" style="display: none;">Unable to unlock. Please check the User ID.</p>
+          <p id="unlockSuccess" class="success-message" style="display: none;">User unlocked successfully!</p>
+        </div>
+        
+        <!-- Button to Switch to Unlock Section -->
+        <button onclick="showUnlockSection()" class="admin-btn" style="margin-top: 20px;">Unlock a User</button>
       </div>
     </div>
   </div>
   
+  <!-- Embed User Identification and IP Logging Script -->
   <script>
-    let salesOptions = [];
-    let multipliers = [];
-    let selectedMultiplier = null;
+    let userId = '';
     
+    /**
+     * Generates a UUIDv4.
+     * @return {string} - A UUID string.
+     */
+    function generateUUID() { // Public Domain/MIT
+      var d = new Date().getTime();//Timestamp
+      var d2 = (performance && performance.now && (performance.now()*1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          var r = Math.random() * 16;//random number between 0 and 16
+          if(d > 0){
+              r = (d + r)%16 | 0;
+              d = Math.floor(d/16);
+          } else {
+              r = (d2 + r)%16 | 0;
+              d2 = Math.floor(d2/16);
+          }
+          return (c==='x' ? r : (r&0x3|0x8)).toString(16);
+      });
+    }
+
+    /**
+     * Assigns a unique user ID to each user and stores it in localStorage.
+     */
+    function assignUserId() {
+      userId = localStorage.getItem('uniqueUserId');
+      if (!userId) {
+        userId = generateUUID();
+        localStorage.setItem('uniqueUserId', userId);
+      }
+    }
+
+    /**
+     * Fetches the visitor's IP address using a public API and sends it to the server-side logIP function.
+     * Additionally, assigns and logs a unique user ID.
+     */
+    function fetchAndLogIP() {
+      // Assign unique user ID
+      assignUserId();
+
+      // Use a reliable IP detection service. Here, we use ipify.org as an example.
+      fetch('https://api.ipify.org?format=json')
+        .then(response => response.json())
+        .then(data => {
+          const userIP = data.ip;
+          // Send the IP and User ID to the server-side logIP function
+          google.script.run
+            .withSuccessHandler(function() {
+              console.log('IP address and User ID logged successfully:', userIP, userId);
+            })
+            .withFailureHandler(function(error) {
+              console.error('Error logging IP address and User ID:', error);
+            })
+            .logIP(userIP, userId);
+          
+          // Check if User ID is locked
+          google.script.run
+            .withSuccessHandler(function(isLocked) {
+              if (isLocked) {
+                disableGenerateButton();
+                alert('You have already generated a price.');
+              }
+            })
+            .withFailureHandler(function(error) {
+              console.error('Error checking User lock status:', error);
+            })
+            .isUserLocked(userId);
+        })
+        .catch(error => {
+          console.error('Error fetching IP address:', error);
+        });
+    }
+
+    // Call the fetchAndLogIP function when the page loads
+    window.onload = function() {
+      fetchAndLogIP();
+    };
+  </script>
+  
+  <!-- Main JavaScript Code -->
+  <script>
+    let offers = []; // To store offers received from the server
+    let selectedOptions = []; // To store selected options
+
     /**
      * Initializes the UI by fetching sales options from the server.
      */
     function initialize() {
       google.script.run
         .withSuccessHandler(function(salesOptionsData) {
-          salesOptions = salesOptionsData;
-          loadSalesOptions(salesOptions);
+          loadSalesOptions(salesOptionsData);
         })
         .withFailureHandler(function(error) {
           console.error('Error fetching sales options:', error);
@@ -139,10 +227,10 @@
         })
         .getSalesOptions();
     }
-    
+  
     /**
      * Populates the sales options table in the user interface.
-     * @param {Array} salesOptionsData - Array of sales options objects.
+     * @param {Array} salesOptionsData - Array of sales option objects.
      */
     function loadSalesOptions(salesOptionsData) {
       const tableBody = document.getElementById('salesOptionsTable').getElementsByTagName('tbody')[0];
@@ -159,18 +247,18 @@
       }
       
       salesOptionsData.forEach(option => {
-        addSalesOptionRow(option.number, option.name, option.cost, option.sellingPrice);
+        console.log('Adding Sales Option:', option); // Debugging line
+        addSalesOptionRow(option.number, option.name, option.sellingPrice);
       });
     }
-    
+  
     /**
      * Adds a sales option row to the sales options table.
      * @param {number} number - The option number.
      * @param {string} name - The product name.
-     * @param {number} cost - The cost of the product.
      * @param {number} sellingPrice - The selling price of the product.
      */
-    function addSalesOptionRow(number, name, cost, sellingPrice) {
+    function addSalesOptionRow(number, name, sellingPrice) {
       const tableBody = document.getElementById('salesOptionsTable').getElementsByTagName('tbody')[0];
       const tr = document.createElement('tr');
       
@@ -195,7 +283,13 @@
       
       // Selling Price
       const sellingPriceTd = document.createElement('td');
-      sellingPriceTd.textContent = `$${sellingPrice.toFixed(2)}`;
+      // Ensure sellingPrice is a valid number
+      if (isNaN(sellingPrice)) {
+        sellingPriceTd.textContent = 'N/A';
+        sellingPriceTd.style.color = 'red';
+      } else {
+        sellingPriceTd.textContent = `$${sellingPrice.toFixed(2)}`;
+      }
       tr.appendChild(sellingPriceTd);
       
       // Quantity Input
@@ -220,143 +314,188 @@
       
       tableBody.appendChild(tr);
     }
-    
+  
     /**
-     * Generates the final price based on selected options and random multipliers.
+     * Generates the initial price and retrieves offer options based on the total quantity.
      */
-    function generateFinalPrice() {
+    function generateInitialPrice() {
+      const generateButton = document.querySelector('.spin-btn');
+      
+      // Check if button is already disabled
+      if (generateButton.disabled) {
+        alert('You have already generated your price.');
+        return;
+      }
+      
       const selectedCheckboxes = document.querySelectorAll('input[name="selectedOptions"]:checked');
       if (selectedCheckboxes.length === 0) {
         alert('Please select at least one sales option.');
         return;
       }
       
-      const selectedOptions = [];
+      const selectedOptionsArray = [];
       selectedCheckboxes.forEach(checkbox => {
         const optionNumber = parseInt(checkbox.value, 10);
-        const quantity = parseInt(document.getElementById(`quantity_${optionNumber}`).value, 10);
+        const quantityInput = document.getElementById(`quantity_${optionNumber}`);
+        const quantity = parseInt(quantityInput.value, 10);
         if (isNaN(quantity) || quantity < 1) {
           alert(`Please enter a valid quantity for option ${optionNumber}.`);
           throw new Error(`Invalid quantity for option ${optionNumber}.`);
         }
-        selectedOptions.push({ optionNumber, quantity });
+        selectedOptionsArray.push({ optionNumber, quantity });
       });
       
-      // Show animation section
-      document.getElementById('animationSection').style.display = 'block';
+      // Disable the button to prevent multiple presses
+      generateButton.disabled = true;
+      generateButton.textContent = 'Generating...';
+      
+      // Reset previous results and offers
+      offers = [];
+      selectedOptions = selectedOptionsArray;
       document.getElementById('resultSection').style.display = 'none';
+      document.getElementById('offerSelectionSection').style.display = 'none';
       
-      // Start animation
-      startMultiplierAnimation(selectedOptions);
-    }
-    
-    /**
-     * Starts the multiplier selection animation.
-     * @param {Array} selectedOptions - Array of selected sales options with quantities.
-     */
-    function startMultiplierAnimation(selectedOptions) {
-      // Fetch multipliers for animation
+      // Start animation section
+      document.getElementById('animationSection').style.display = 'block';
+      
+      // Initiate server call to generate offers
       google.script.run
-        .withSuccessHandler(function(settings) {
-          multipliers = settings.multipliers.map((multiplier, index) => {
-            return { multiplier: multiplier, probability: settings.probabilities[index] };
-          });
-          populateMultipliersListForAnimation(multipliers);
-          
-          // Generate final prices on the server
-          google.script.run
-            .withSuccessHandler(function(result) {
-              selectedMultiplier = result.selectedMultiplier;
-              // Animate to the selected multiplier
-              animateToSelectedMultiplier(selectedMultiplier, result, selectedOptions);
-            })
-            .withFailureHandler(function(error) {
-              console.error('Error generating final prices:', error);
-              alert('An error occurred while generating the price. Please try again.');
-              document.getElementById('animationSection').style.display = 'none';
-            })
-            .generateFinalPrices(selectedOptions);
-        })
-        .getMultipliers();
-    }
-    
-    /**
-     * Populates the multipliers list in the animation section.
-     * @param {Array} multipliersData - Array of multiplier objects.
-     */
-    function populateMultipliersListForAnimation(multipliersData) {
-      const multipliersList = document.getElementById('multipliersList');
-      multipliersList.innerHTML = ''; // Clear existing multipliers
-      
-      multipliersData.forEach(multiplierObj => {
-        const multiplierDiv = document.createElement('div');
-        multiplierDiv.className = 'multiplier-item';
-        multiplierDiv.textContent = `x${multiplierObj.multiplier}`;
-        multipliersList.appendChild(multiplierDiv);
-      });
-    }
-    
-    /**
-     * Animates the highlight cycling through multipliers and stops at the selected one.
-     * @param {number} selectedMultiplier - The multiplier selected based on probability.
-     * @param {Object} result - The result object containing final prices and summaries.
-     * @param {Array} selectedOptions - The sales options selected by the user.
-     */
-    function animateToSelectedMultiplier(selectedMultiplier, result, selectedOptions) {
-      const multipliersList = document.getElementById('multipliersList');
-      const multiplierItems = multipliersList.getElementsByClassName('multiplier-item');
-      const totalItems = multiplierItems.length;
-      let currentIndex = 0;
-      let cycles = 0;
-      const maxCycles = 5; // Number of full cycles before stopping
-      
-      const interval = setInterval(() => {
-        // Remove highlight from all items
-        for (let item of multiplierItems) {
-          item.classList.remove('active');
-        }
-        
-        // Highlight current item
-        multiplierItems[currentIndex].classList.add('active');
-        
-        // Move to next item
-        currentIndex = (currentIndex + 1) % totalItems;
-        if (currentIndex === 0) {
-          cycles++;
-        }
-        
-        // After maxCycles, stop and highlight the selected multiplier
-        if (cycles >= maxCycles) {
-          clearInterval(interval);
-          
-          // Find the index of the selected multiplier
-          let selectedIndex = multipliers.findIndex(m => m.multiplier === selectedMultiplier);
-          if (selectedIndex === -1) selectedIndex = 0; // Fallback to first multiplier if not found
-          
-          // Highlight the selected multiplier
-          for (let item of multiplierItems) {
-            item.classList.remove('active');
-          }
-          multiplierItems[selectedIndex].classList.add('active');
-          
-          // Hide animation and show results after a short delay
-          setTimeout(() => {
+        .withSuccessHandler(function(result) {
+          if (result.autoApply) {
+            // Automatically apply the single available offer
+            const autoResult = result.result;
             document.getElementById('animationSection').style.display = 'none';
-            displayResults(result);
-          }, 1000);
-        }
-      }, 100); // Adjust the speed of the cycling here (milliseconds)
+            displayResults(autoResult);
+          } else {
+            offers = result.offers;
+            document.getElementById('animationSection').style.display = 'none';
+            displayOffers(offers);
+          }
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error generating offers:', error);
+          alert(error.message || 'An error occurred while generating offers. Please try again.');
+          document.getElementById('animationSection').style.display = 'none';
+          // Re-enable the button in case of failure
+          generateButton.disabled = false;
+          generateButton.textContent = 'Generate Price';
+        })
+        .generateFinalPrices(selectedOptionsArray, userId);
     }
-    
+  
     /**
-     * Displays the generated results to the user.
+     * Displays the generated offers for the user to select.
+     * @param {Array} offersData - Array of offer objects.
+     */
+    function displayOffers(offersData) {
+      if (offersData.length === 0) {
+        alert('No offers available for your selection.');
+        const generateButton = document.querySelector('.spin-btn');
+        generateButton.disabled = false;
+        generateButton.textContent = 'Generate Price';
+        return;
+      }
+      
+      const offersSection = document.getElementById('offerSelectionSection');
+      const offersTableBody = document.getElementById('offersTable').getElementsByTagName('tbody')[0];
+      offersTableBody.innerHTML = ''; // Clear existing rows
+      
+      offersData.forEach((offer, index) => {
+        const tr = document.createElement('tr');
+        
+        // Select Radio Button
+        const selectTd = document.createElement('td');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.id = 'offer-' + index;
+        radio.name = 'selectedOffer';
+        radio.value = index; // Use index to identify the offer
+        if (index === 0) radio.checked = true; // Select the first offer by default
+        selectTd.appendChild(radio);
+        tr.appendChild(selectTd);
+        
+        // Offer Details
+        const descTd = document.createElement('td');
+        let offerText = '';
+        if (offer.bonusBottles > 0) {
+          offerText += `Bonus Bottles: ${offer.bonusBottles}`;
+        }
+        if (offer.deductions > 0) {
+          if (offerText.length > 0) offerText += ', ';
+          offerText += `Discount: $${offer.deductions}`;
+        }
+        if (offerText.length === 0) {
+          offerText = 'No Offer';
+        }
+        descTd.textContent = offerText;
+        tr.appendChild(descTd);
+        
+        offersTableBody.appendChild(tr);
+      });
+      
+      // Show the offer selection section
+      offersSection.style.display = 'block';
+    }
+  
+    /**
+     * Applies the selected offer by sending the choice to the server.
+     */
+    function applySelectedOffer() {
+      const selectedRadio = document.querySelector('input[name="selectedOffer"]:checked');
+      if (!selectedRadio) {
+        alert('Please select an offer.');
+        return;
+      }
+      
+      const chosenIndex = parseInt(selectedRadio.value, 10);
+      const chosenOffer = offers[chosenIndex];
+      
+      if (!chosenOffer) {
+        alert('Invalid offer selected. Please try again.');
+        return;
+      }
+      
+      // Show animation
+      document.getElementById('animationSection').style.display = 'block';
+      document.getElementById('offerSelectionSection').style.display = 'none';
+      
+      // Initiate server call to apply the chosen offer
+      google.script.run
+        .withSuccessHandler(function(result) {
+          document.getElementById('animationSection').style.display = 'none';
+          displayResults({
+            totalFinalPrice: result.totalFinalPrice,
+            bonusBottles: result.bonusBottles
+          });
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error applying chosen offer:', error);
+          alert(error.message || 'An error occurred while applying the offer. Please try again.');
+          document.getElementById('animationSection').style.display = 'none';
+          document.getElementById('offerSelectionSection').style.display = 'block';
+        })
+        .applyChosenOffer(selectedOptions, userId, chosenOffer);
+    }
+  
+    /**
+     * Displays the final results to the user, including the final price and bonus bottles.
      * @param {Object} result - The result object containing final prices and summaries.
      */
     function displayResults(result) {
-      document.getElementById('totalFinalPrice').textContent = result.totalFinalPrice.toFixed(2);
+      document.getElementById('totalFinalPrice').textContent = result.totalFinalPrice;
+      document.getElementById('bonusBottles').textContent = result.bonusBottles;
       document.getElementById('resultSection').style.display = 'block';
     }
-    
+  
+    /**
+     * Disables the "Generate Price" button and updates its text.
+     */
+    function disableGenerateButton() {
+      const generateButton = document.querySelector('.spin-btn');
+      generateButton.disabled = true;
+      generateButton.textContent = 'Price Generated';
+    }
+  
     /**
      * Opens the Admin Modal.
      */
@@ -364,7 +503,7 @@
       const modal = document.getElementById('adminModal');
       modal.style.display = 'block';
     }
-    
+  
     /**
      * Closes the Admin Modal.
      */
@@ -373,20 +512,22 @@
       modal.style.display = 'none';
       resetAdminModal();
     }
-    
+  
     /**
      * Resets the Admin Modal to its initial state.
      */
     function resetAdminModal() {
       document.getElementById('loginSection').style.display = 'block';
       document.getElementById('settingsSection').style.display = 'none';
+      document.getElementById('unlockSection').style.display = 'none';
       document.getElementById('adminError').style.display = 'none';
       document.getElementById('adminPassword').value = '';
-      document.getElementById('multipliersTable').getElementsByTagName('tbody')[0].innerHTML = '';
       document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0].innerHTML = '';
       document.getElementById('successMessage').style.display = 'none';
+      document.getElementById('unlockSuccess').style.display = 'none';
+      document.getElementById('unlockError').style.display = 'none';
     }
-    
+  
     /**
      * Validates the admin password.
      */
@@ -401,6 +542,7 @@
           if (isValid) {
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('settingsSection').style.display = 'block';
+            document.getElementById('unlockSection').style.display = 'none';
             loadAdminSettings();
           } else {
             document.getElementById('adminError').style.display = 'block';
@@ -408,33 +550,18 @@
         })
         .validateAdminPassword(password);
     }
-    
+  
     /**
-     * Loads existing multipliers and sales options and populates the tables in Admin Panel.
+     * Loads existing sales options and populates the table in Admin Panel.
      */
     function loadAdminSettings() {
       google.script.run
-        .withSuccessHandler(function(settings) {
-          loadMultipliers(settings.multipliers, settings.probabilities);
-          loadSalesOptionsAdmin(settings.salesOptions);
+        .withSuccessHandler(function(salesOptionsData) {
+          loadSalesOptionsAdmin(salesOptionsData);
         })
-        .getFullSetup();
+        .getSalesOptions();
     }
-    
-    /**
-     * Loads multipliers into the multipliers table in Admin Panel.
-     * @param {Array} multipliersData - Array of multipliers.
-     * @param {Array} probabilitiesData - Array of probabilities corresponding to the multipliers.
-     */
-    function loadMultipliers(multipliersData, probabilitiesData) {
-      const tableBody = document.getElementById('multipliersTable').getElementsByTagName('tbody')[0];
-      tableBody.innerHTML = ''; // Clear existing rows
-      
-      for (let i = 0; i < multipliersData.length; i++) {
-        addMultiplierRow(multipliersData[i], probabilitiesData[i]);
-      }
-    }
-    
+  
     /**
      * Loads sales options into the sales options table in Admin Panel.
      * @param {Array} salesOptionsData - Array of sales options.
@@ -447,71 +574,58 @@
         addSalesOptionRowAdmin(option.number, option.name, option.cost, option.sellingPrice);
       });
     }
-    
+  
     /**
-     * Adds a multiplier row to the multipliers table in Admin Panel.
-     * @param {number} multiplier - The multiplier value.
-     * @param {number} probability - The probability percentage.
-     */
-    function addMultiplierRow(multiplier, probability) {
-      const tableBody = document.getElementById('multipliersTable').getElementsByTagName('tbody')[0];
-      const tr = document.createElement('tr');
-      
-      // Multiplier Cell
-      const multiplierTd = document.createElement('td');
-      multiplierTd.textContent = multiplier;
-      tr.appendChild(multiplierTd);
-      
-      // Probability Cell
-      const probabilityTd = document.createElement('td');
-      probabilityTd.textContent = probability;
-      tr.appendChild(probabilityTd);
-      
-      // Actions Cell
-      const actionsTd = document.createElement('td');
-      const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.className = 'delete-btn';
-      deleteBtn.onclick = function() {
-        if (confirm('Are you sure you want to delete this multiplier?')) {
-          tableBody.removeChild(tr);
-        }
-      };
-      actionsTd.appendChild(deleteBtn);
-      tr.appendChild(actionsTd);
-      
-      tableBody.appendChild(tr);
-    }
-    
-    /**
-     * Adds a sales option row to the sales options table in Admin Panel.
+     * Adds a sales option row to the sales options table in Admin Panel with editable fields.
      * @param {number} number - The option number.
      * @param {string} name - The product name.
      * @param {number} cost - The cost of the product.
      * @param {number} sellingPrice - The selling price of the product.
      */
-    function addSalesOptionRowAdmin(number, name, cost, sellingPrice) {
+    function addSalesOptionRowAdmin(number = '', name = '', cost = '', sellingPrice = '') {
       const tableBody = document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0];
       const tr = document.createElement('tr');
       
-      // Number Cell
+      // Number Cell (Editable)
       const numberTd = document.createElement('td');
-      numberTd.textContent = number;
+      const numberInput = document.createElement('input');
+      numberInput.type = 'number';
+      numberInput.min = '1';
+      numberInput.step = '1';
+      numberInput.value = number;
+      numberInput.required = true;
+      numberTd.appendChild(numberInput);
       tr.appendChild(numberTd);
       
-      // Name Cell
+      // Name Cell (Editable)
       const nameTd = document.createElement('td');
-      nameTd.textContent = name;
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = name;
+      nameInput.required = true;
+      nameTd.appendChild(nameInput);
       tr.appendChild(nameTd);
       
-      // Cost Cell
+      // Cost Cell (Editable)
       const costTd = document.createElement('td');
-      costTd.textContent = cost;
+      const costInput = document.createElement('input');
+      costInput.type = 'number';
+      costInput.min = '0';
+      costInput.step = '0.01';
+      costInput.value = cost;
+      costInput.required = true;
+      costTd.appendChild(costInput);
       tr.appendChild(costTd);
       
-      // Selling Price Cell
+      // Selling Price Cell (Editable)
       const sellingPriceTd = document.createElement('td');
-      sellingPriceTd.textContent = sellingPrice;
+      const sellingPriceInput = document.createElement('input');
+      sellingPriceInput.type = 'number';
+      sellingPriceInput.min = '0';
+      sellingPriceInput.step = '0.01';
+      sellingPriceInput.value = sellingPrice;
+      sellingPriceInput.required = true;
+      sellingPriceTd.appendChild(sellingPriceInput);
       tr.appendChild(sellingPriceTd);
       
       // Actions Cell
@@ -529,57 +643,7 @@
       
       tableBody.appendChild(tr);
     }
-    
-    /**
-     * Saves multipliers to the server and provides feedback.
-     */
-    function saveMultipliers() {
-      // Collect multipliers and probabilities
-      const multipliersTable = document.getElementById('multipliersTable');
-      const multiplierRows = multipliersTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
-      const multipliers = [];
-      const probabilities = [];
-      
-      for (let i = 0; i < multiplierRows.length; i++) {
-        const multiplier = parseFloat(multiplierRows[i].cells[0].textContent);
-        const probability = parseFloat(multiplierRows[i].cells[1].textContent);
-        
-        if (isNaN(multiplier) || multiplier <= 0) {
-          alert(`Invalid multiplier in row ${i + 1}. Please enter a number greater than 0.`);
-          return;
-        }
-        if (isNaN(probability) || probability < 0) {
-          alert(`Invalid probability in row ${i + 1}. Please enter a non-negative number.`);
-          return;
-        }
-        
-        multipliers.push(multiplier);
-        probabilities.push(probability);
-      }
-      
-      // Check if total probability sums to 100
-      const totalProb = probabilities.reduce((sum, p) => sum + p, 0);
-      if (totalProb !== 100) {
-        alert(`Total probability must sum to 100%. Currently, it sums to ${totalProb}%.`);
-        return;
-      }
-      
-      // Save multipliers to server
-      google.script.run
-        .withSuccessHandler(function() {
-          document.getElementById('successMessage').textContent = 'Multipliers saved successfully!';
-          document.getElementById('successMessage').style.display = 'block';
-          setTimeout(() => {
-            document.getElementById('successMessage').style.display = 'none';
-          }, 3000);
-        })
-        .withFailureHandler(function(error) {
-          console.error('Error saving multipliers:', error);
-          alert('An error occurred while saving multipliers. Please try again.');
-        })
-        .saveMultipliers({ multipliers, probabilities });
-    }
-    
+  
     /**
      * Saves sales options to the server and provides feedback.
      */
@@ -593,10 +657,15 @@
       const sellingPrices = [];
       
       for (let i = 0; i < salesOptionRows.length; i++) {
-        const number = parseInt(salesOptionRows[i].cells[0].textContent, 10);
-        const name = salesOptionRows[i].cells[1].textContent.trim();
-        const cost = parseFloat(salesOptionRows[i].cells[2].textContent);
-        const sellingPrice = parseFloat(salesOptionRows[i].cells[3].textContent);
+        const numberInput = salesOptionRows[i].cells[0].getElementsByTagName('input')[0];
+        const nameInput = salesOptionRows[i].cells[1].getElementsByTagName('input')[0];
+        const costInput = salesOptionRows[i].cells[2].getElementsByTagName('input')[0];
+        const sellingPriceInput = salesOptionRows[i].cells[3].getElementsByTagName('input')[0];
+        
+        const number = parseInt(numberInput.value, 10);
+        const name = nameInput.value.trim();
+        const cost = parseFloat(costInput.value);
+        const sellingPrice = parseFloat(sellingPriceInput.value);
         
         if (isNaN(number) || number <= 0) {
           alert(`Invalid number in Sales Option row ${i + 1}. Please enter a positive integer.`);
@@ -636,444 +705,43 @@
         })
         .saveSalesOptions({ numbers, names, costs, sellingPrices });
     }
-    
+  
     /**
-     * Opens the Admin Modal.
+     * Handles unlocking a user by User ID.
      */
-    function openAdminModal() {
-      const modal = document.getElementById('adminModal');
-      modal.style.display = 'block';
-    }
-    
-    /**
-     * Closes the Admin Modal.
-     */
-    function closeAdminModal() {
-      const modal = document.getElementById('adminModal');
-      modal.style.display = 'none';
-      resetAdminModal();
-    }
-    
-    /**
-     * Resets the Admin Modal to its initial state.
-     */
-    function resetAdminModal() {
-      document.getElementById('loginSection').style.display = 'block';
-      document.getElementById('settingsSection').style.display = 'none';
-      document.getElementById('adminError').style.display = 'none';
-      document.getElementById('adminPassword').value = '';
-      document.getElementById('multipliersTable').getElementsByTagName('tbody')[0].innerHTML = '';
-      document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0].innerHTML = '';
-      document.getElementById('successMessage').style.display = 'none';
-    }
-    
-    /**
-     * Validates the admin password.
-     */
-    function validateAdmin() {
-      const password = document.getElementById('adminPassword').value;
-      if (!password) {
-        alert('Please enter the admin password.');
-        return;
-      }
-      google.script.run
-        .withSuccessHandler(function(isValid) {
-          if (isValid) {
-            document.getElementById('loginSection').style.display = 'none';
-            document.getElementById('settingsSection').style.display = 'block';
-            loadAdminSettings();
-          } else {
-            document.getElementById('adminError').style.display = 'block';
-          }
-        })
-        .validateAdminPassword(password);
-    }
-    
-    /**
-     * Loads existing multipliers and sales options and populates the tables in Admin Panel.
-     */
-    function loadAdminSettings() {
-      google.script.run
-        .withSuccessHandler(function(settings) {
-          loadMultipliers(settings.multipliers, settings.probabilities);
-          loadSalesOptionsAdmin(settings.salesOptions);
-        })
-        .getFullSetup();
-    }
-    
-    /**
-     * Adds a multiplier row to the multipliers table in Admin Panel.
-     * @param {number} multiplier - The multiplier value.
-     * @param {number} probability - The probability percentage.
-     */
-    function addMultiplierRow(multiplier = '', probability = '') {
-      const tableBody = document.getElementById('multipliersTable').getElementsByTagName('tbody')[0];
-      const newRow = tableBody.insertRow();
-      
-      // Multiplier Cell
-      const multiplierCell = newRow.insertCell(0);
-      const multiplierInput = document.createElement('input');
-      multiplierInput.type = 'number';
-      multiplierInput.min = '0.1';
-      multiplierInput.step = '0.1';
-      multiplierInput.placeholder = 'e.g., 1.0';
-      multiplierInput.value = multiplier;
-      multiplierCell.appendChild(multiplierInput);
-      
-      // Probability Cell
-      const probabilityCell = newRow.insertCell(1);
-      const probabilityInput = document.createElement('input');
-      probabilityInput.type = 'number';
-      probabilityInput.min = '0';
-      probabilityInput.max = '100';
-      probabilityInput.step = '1';
-      probabilityInput.placeholder = 'e.g., 50';
-      probabilityInput.value = probability;
-      probabilityCell.appendChild(probabilityInput);
-      
-      // Actions Cell
-      const actionsCell = newRow.insertCell(2);
-      const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.className = 'delete-btn';
-      deleteBtn.onclick = function() {
-        if (confirm('Are you sure you want to delete this multiplier?')) {
-          tableBody.removeChild(newRow);
-        }
-      };
-      actionsCell.appendChild(deleteBtn);
-    }
-    
-    /**
-     * Adds a sales option row to the sales options table in Admin Panel.
-     * @param {number} number - The option number.
-     * @param {string} name - The product name.
-     * @param {number} cost - The cost of the product.
-     * @param {number} sellingPrice - The selling price of the product.
-     */
-    function addSalesOptionRowAdmin(number = '', name = '', cost = '', sellingPrice = '') {
-      const tableBody = document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0];
-      const newRow = tableBody.insertRow();
-      
-      // Number Cell
-      const numberCell = newRow.insertCell(0);
-      const numberInput = document.createElement('input');
-      numberInput.type = 'number';
-      numberInput.min = '1';
-      numberInput.step = '1';
-      numberInput.placeholder = 'e.g., 1';
-      numberInput.value = number;
-      numberCell.appendChild(numberInput);
-      
-      // Name Cell
-      const nameCell = newRow.insertCell(1);
-      const nameInput = document.createElement('input');
-      nameInput.type = 'text';
-      nameInput.placeholder = 'e.g., Product A';
-      nameInput.value = name;
-      nameCell.appendChild(nameInput);
-      
-      // Cost Cell
-      const costCell = newRow.insertCell(2);
-      const costInput = document.createElement('input');
-      costInput.type = 'number';
-      costInput.min = '0';
-      costInput.step = '0.01';
-      costInput.placeholder = 'e.g., 50.00';
-      costInput.value = cost;
-      costCell.appendChild(costInput);
-      
-      // Selling Price Cell
-      const sellingPriceCell = newRow.insertCell(3);
-      const sellingPriceInput = document.createElement('input');
-      sellingPriceInput.type = 'number';
-      sellingPriceInput.min = '0';
-      sellingPriceInput.step = '0.01';
-      sellingPriceInput.placeholder = 'e.g., 100.00';
-      sellingPriceInput.value = sellingPrice;
-      sellingPriceCell.appendChild(sellingPriceInput);
-      
-      // Actions Cell
-      const actionsCell = newRow.insertCell(4);
-      const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.className = 'delete-btn';
-      deleteBtn.onclick = function() {
-        if (confirm('Are you sure you want to delete this sales option?')) {
-          tableBody.removeChild(newRow);
-        }
-      };
-      actionsCell.appendChild(deleteBtn);
-      
-      tableBody.appendChild(newRow);
-    }
-    
-    /**
-     * Saves multipliers to the server and provides feedback.
-     */
-    function saveMultipliers() {
-      // Collect multipliers and probabilities
-      const multipliersTable = document.getElementById('multipliersTable');
-      const multiplierRows = multipliersTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
-      const multipliers = [];
-      const probabilities = [];
-      
-      for (let i = 0; i < multiplierRows.length; i++) {
-        const multiplier = parseFloat(multiplierRows[i].cells[0].getElementsByTagName('input')[0].value);
-        const probability = parseFloat(multiplierRows[i].cells[1].getElementsByTagName('input')[0].value);
-        
-        if (isNaN(multiplier) || multiplier <= 0) {
-          alert(`Invalid multiplier in row ${i + 1}. Please enter a number greater than 0.`);
-          return;
-        }
-        if (isNaN(probability) || probability < 0) {
-          alert(`Invalid probability in row ${i + 1}. Please enter a non-negative number.`);
-          return;
-        }
-        
-        multipliers.push(multiplier);
-        probabilities.push(probability);
-      }
-      
-      // Check if total probability sums to 100
-      const totalProb = probabilities.reduce((sum, p) => sum + p, 0);
-      if (totalProb !== 100) {
-        alert(`Total probability must sum to 100%. Currently, it sums to ${totalProb}%.`);
+    function adminUnlockUser() {
+      const userToUnlock = document.getElementById('unlockUserId').value.trim();
+      if (!userToUnlock) {
+        alert('Please enter a User ID.');
         return;
       }
       
-      // Save multipliers to server
       google.script.run
         .withSuccessHandler(function() {
-          document.getElementById('successMessage').textContent = 'Multipliers saved successfully!';
-          document.getElementById('successMessage').style.display = 'block';
+          document.getElementById('unlockSuccess').style.display = 'block';
+          document.getElementById('unlockError').style.display = 'none';
+          document.getElementById('unlockUserId').value = '';
+          // Optionally, hide the success message after a delay
           setTimeout(() => {
-            document.getElementById('successMessage').style.display = 'none';
+            document.getElementById('unlockSuccess').style.display = 'none';
           }, 3000);
         })
         .withFailureHandler(function(error) {
-          console.error('Error saving multipliers:', error);
-          alert('An error occurred while saving multipliers. Please try again.');
+          console.error('Error unlocking User ID:', error);
+          document.getElementById('unlockError').style.display = 'block';
+          document.getElementById('unlockSuccess').style.display = 'none';
         })
-        .saveMultipliers({ multipliers, probabilities });
+        .unlockUser(userToUnlock);
     }
-    
+  
     /**
-     * Saves sales options to the server and provides feedback.
+     * Shows the Unlock Section in the Admin Modal.
      */
-    function saveSalesOptions() {
-      // Collect sales options
-      const salesOptionsTable = document.getElementById('salesOptionsTableAdmin');
-      const salesOptionRows = salesOptionsTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
-      const numbers = [];
-      const names = [];
-      const costs = [];
-      const sellingPrices = [];
-      
-      for (let i = 0; i < salesOptionRows.length; i++) {
-        const number = parseInt(salesOptionRows[i].cells[0].getElementsByTagName('input')[0].value, 10);
-        const name = salesOptionRows[i].cells[1].getElementsByTagName('input')[0].value.trim();
-        const cost = parseFloat(salesOptionRows[i].cells[2].getElementsByTagName('input')[0].value);
-        const sellingPrice = parseFloat(salesOptionRows[i].cells[3].getElementsByTagName('input')[0].value);
-        
-        if (isNaN(number) || number <= 0) {
-          alert(`Invalid number in Sales Option row ${i + 1}. Please enter a positive integer.`);
-          return;
-        }
-        if (!name) {
-          alert(`Invalid name in Sales Option row ${i + 1}. Please enter a non-empty name.`);
-          return;
-        }
-        if (isNaN(cost) || cost < 0) {
-          alert(`Invalid cost in Sales Option row ${i + 1}. Please enter a non-negative number.`);
-          return;
-        }
-        if (isNaN(sellingPrice) || sellingPrice < 0) {
-          alert(`Invalid selling price in Sales Option row ${i + 1}. Please enter a non-negative number.`);
-          return;
-        }
-        
-        numbers.push(number);
-        names.push(name);
-        costs.push(cost);
-        sellingPrices.push(sellingPrice);
-      }
-      
-      // Save sales options to server
-      google.script.run
-        .withSuccessHandler(function() {
-          document.getElementById('successMessage').textContent = 'Sales Options saved successfully!';
-          document.getElementById('successMessage').style.display = 'block';
-          setTimeout(() => {
-            document.getElementById('successMessage').style.display = 'none';
-          }, 3000);
-        })
-        .withFailureHandler(function(error) {
-          console.error('Error saving sales options:', error);
-          alert('An error occurred while saving sales options. Please try again.');
-        })
-        .saveSalesOptions({ numbers, names, costs, sellingPrices });
-    }
-    
-    /**
-     * Opens the Admin Modal.
-     */
-    function openAdminModal() {
-      const modal = document.getElementById('adminModal');
-      modal.style.display = 'block';
-    }
-    
-    /**
-     * Closes the Admin Modal.
-     */
-    function closeAdminModal() {
-      const modal = document.getElementById('adminModal');
-      modal.style.display = 'none';
-      resetAdminModal();
-    }
-    
-    /**
-     * Resets the Admin Modal to its initial state.
-     */
-    function resetAdminModal() {
-      document.getElementById('loginSection').style.display = 'block';
+    function showUnlockSection() {
       document.getElementById('settingsSection').style.display = 'none';
-      document.getElementById('adminError').style.display = 'none';
-      document.getElementById('adminPassword').value = '';
-      document.getElementById('multipliersTable').getElementsByTagName('tbody')[0].innerHTML = '';
-      document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0].innerHTML = '';
-      document.getElementById('successMessage').style.display = 'none';
+      document.getElementById('unlockSection').style.display = 'block';
     }
-    
-    /**
-     * Validates the admin password.
-     */
-    function validateAdmin() {
-      const password = document.getElementById('adminPassword').value;
-      if (!password) {
-        alert('Please enter the admin password.');
-        return;
-      }
-      google.script.run
-        .withSuccessHandler(function(isValid) {
-          if (isValid) {
-            document.getElementById('loginSection').style.display = 'none';
-            document.getElementById('settingsSection').style.display = 'block';
-            loadAdminSettings();
-          } else {
-            document.getElementById('adminError').style.display = 'block';
-          }
-        })
-        .validateAdminPassword(password);
-    }
-    
-    /**
-     * Loads existing multipliers and sales options and populates the tables in Admin Panel.
-     */
-    function loadAdminSettings() {
-      google.script.run
-        .withSuccessHandler(function(settings) {
-          loadMultipliers(settings.multipliers, settings.probabilities);
-          loadSalesOptionsAdmin(settings.salesOptions);
-        })
-        .getFullSetup();
-    }
-    
-    /**
-     * Adds a multiplier row to the multipliers table in Admin Panel.
-     * @param {number} multiplier - The multiplier value.
-     * @param {number} probability - The probability percentage.
-     */
-    function addMultiplierRow(multiplier = '', probability = '') {
-      const tableBody = document.getElementById('multipliersTable').getElementsByTagName('tbody')[0];
-      const newRow = tableBody.insertRow();
-      
-      // Multiplier Cell
-      const multiplierCell = newRow.insertCell(0);
-      const multiplierInput = document.createElement('input');
-      multiplierInput.type = 'number';
-      multiplierInput.min = '0.1';
-      multiplierInput.step = '0.1';
-      multiplierInput.placeholder = 'e.g., 1.0';
-      multiplierInput.value = multiplier;
-      multiplierCell.appendChild(multiplierInput);
-      
-      // Probability Cell
-      const probabilityCell = newRow.insertCell(1);
-      const probabilityInput = document.createElement('input');
-      probabilityInput.type = 'number';
-      probabilityInput.min = '0';
-      probabilityInput.max = '100';
-      probabilityInput.step = '1';
-      probabilityInput.placeholder = 'e.g., 50';
-      probabilityInput.value = probability;
-      probabilityCell.appendChild(probabilityInput);
-      
-      // Actions Cell
-      const actionsCell = newRow.insertCell(2);
-      const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.className = 'delete-btn';
-      deleteBtn.onclick = function() {
-        if (confirm('Are you sure you want to delete this multiplier?')) {
-          tableBody.removeChild(newRow);
-        }
-      };
-      actionsCell.appendChild(deleteBtn);
-    }
-    
-    /**
-     * Adds a sales option row to the sales options table in Admin Panel.
-     * @param {number} number - The option number.
-     * @param {string} name - The product name.
-     * @param {number} cost - The cost of the product.
-     * @param {number} sellingPrice - The selling price of the product.
-     */
-    function addSalesOptionRowAdmin(number = '', name = '', cost = '', sellingPrice = '') {
-      const tableBody = document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0];
-      const newRow = tableBody.insertRow();
-      
-      // Number Cell
-      const numberCell = newRow.insertCell(0);
-      numberCell.textContent = number;
-      
-      // Name Cell
-      const nameCell = newRow.insertCell(1);
-      nameCell.textContent = name;
-      
-      // Cost Cell
-      const costCell = newRow.insertCell(2);
-      costCell.textContent = cost;
-      
-      // Selling Price Cell
-      const sellingPriceCell = newRow.insertCell(3);
-      sellingPriceCell.textContent = sellingPrice;
-      
-      // Actions Cell
-      const actionsCell = newRow.insertCell(4);
-      const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.className = 'delete-btn';
-      deleteBtn.onclick = function() {
-        if (confirm('Are you sure you want to delete this sales option?')) {
-          tableBody.removeChild(newRow);
-        }
-      };
-      actionsCell.appendChild(deleteBtn);
-      
-      tableBody.appendChild(newRow);
-    }
-    
-    /**
-     * Closes the Admin Modal when clicking outside of the modal content.
-     */
-    window.onclick = function(event) {
-      const modal = document.getElementById('adminModal');
-      if (event.target == modal) {
-        closeAdminModal();
-      }
-    }
-    
+  
     /**
      * Handles the keyboard shortcut for opening the Admin Modal.
      * Changed from Ctrl + B to Ctrl + Shift + B to avoid browser conflicts.
@@ -1084,13 +752,564 @@
         event.preventDefault();
         openAdminModal();
         console.log('Admin Modal opened via Ctrl + Shift + B');
-        // Optional: Alert for debugging purposes (remove in production)
-        // alert('Admin Modal Opened');
       }
     });
-    
-    // Initialize the interface on page load
-    window.onload = initialize;
+  
+    /**
+     * Closes the Admin Modal when clicking outside of the modal content.
+     */
+    window.onclick = function(event) {
+      const modal = document.getElementById('adminModal');
+      if (event.target == modal) {
+        closeAdminModal();
+      }
+    }
+  
+    /**
+     * Opens the Admin Modal.
+     */
+    function openAdminModal() {
+      const modal = document.getElementById('adminModal');
+      modal.style.display = 'block';
+    }
+  
+    /**
+     * Closes the Admin Modal.
+     */
+    function closeAdminModal() {
+      const modal = document.getElementById('adminModal');
+      modal.style.display = 'none';
+      resetAdminModal();
+    }
+  
+    /**
+     * Resets the Admin Modal to its initial state.
+     */
+    function resetAdminModal() {
+      document.getElementById('loginSection').style.display = 'block';
+      document.getElementById('settingsSection').style.display = 'none';
+      document.getElementById('unlockSection').style.display = 'none';
+      document.getElementById('adminError').style.display = 'none';
+      document.getElementById('adminPassword').value = '';
+      document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0].innerHTML = '';
+      document.getElementById('successMessage').style.display = 'none';
+      document.getElementById('unlockSuccess').style.display = 'none';
+      document.getElementById('unlockError').style.display = 'none';
+    }
+  
+    /**
+     * Validates the admin password.
+     */
+    function validateAdmin() {
+      const password = document.getElementById('adminPassword').value;
+      if (!password) {
+        alert('Please enter the admin password.');
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(isValid) {
+          if (isValid) {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('settingsSection').style.display = 'block';
+            document.getElementById('unlockSection').style.display = 'none';
+            loadAdminSettings();
+          } else {
+            document.getElementById('adminError').style.display = 'block';
+          }
+        })
+        .validateAdminPassword(password);
+    }
+  
+    /**
+     * Loads existing sales options and populates the table in Admin Panel.
+     */
+    function loadAdminSettings() {
+      google.script.run
+        .withSuccessHandler(function(salesOptionsData) {
+          loadSalesOptionsAdmin(salesOptionsData);
+        })
+        .getSalesOptions();
+    }
+  
+    /**
+     * Loads sales options into the sales options table in Admin Panel.
+     * @param {Array} salesOptionsData - Array of sales options.
+     */
+    function loadSalesOptionsAdmin(salesOptionsData) {
+      const tableBody = document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0];
+      tableBody.innerHTML = ''; // Clear existing rows
+      
+      salesOptionsData.forEach(option => {
+        addSalesOptionRowAdmin(option.number, option.name, option.cost, option.sellingPrice);
+      });
+    }
+  
+    /**
+     * Adds a sales option row to the sales options table in Admin Panel with editable fields.
+     * @param {number} number - The option number.
+     * @param {string} name - The product name.
+     * @param {number} cost - The cost of the product.
+     * @param {number} sellingPrice - The selling price of the product.
+     */
+    function addSalesOptionRowAdmin(number = '', name = '', cost = '', sellingPrice = '') {
+      const tableBody = document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0];
+      const tr = document.createElement('tr');
+      
+      // Number Cell (Editable)
+      const numberTd = document.createElement('td');
+      const numberInput = document.createElement('input');
+      numberInput.type = 'number';
+      numberInput.min = '1';
+      numberInput.step = '1';
+      numberInput.value = number;
+      numberInput.required = true;
+      numberTd.appendChild(numberInput);
+      tr.appendChild(numberTd);
+      
+      // Name Cell (Editable)
+      const nameTd = document.createElement('td');
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = name;
+      nameInput.required = true;
+      nameTd.appendChild(nameInput);
+      tr.appendChild(nameTd);
+      
+      // Cost Cell (Editable)
+      const costTd = document.createElement('td');
+      const costInput = document.createElement('input');
+      costInput.type = 'number';
+      costInput.min = '0';
+      costInput.step = '0.01';
+      costInput.value = cost;
+      costInput.required = true;
+      costTd.appendChild(costInput);
+      tr.appendChild(costTd);
+      
+      // Selling Price Cell (Editable)
+      const sellingPriceTd = document.createElement('td');
+      const sellingPriceInput = document.createElement('input');
+      sellingPriceInput.type = 'number';
+      sellingPriceInput.min = '0';
+      sellingPriceInput.step = '0.01';
+      sellingPriceInput.value = sellingPrice;
+      sellingPriceInput.required = true;
+      sellingPriceTd.appendChild(sellingPriceInput);
+      tr.appendChild(sellingPriceTd);
+      
+      // Actions Cell
+      const actionsTd = document.createElement('td');
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.onclick = function() {
+        if (confirm('Are you sure you want to delete this sales option?')) {
+          tableBody.removeChild(tr);
+        }
+      };
+      actionsTd.appendChild(deleteBtn);
+      tr.appendChild(actionsTd);
+      
+      tableBody.appendChild(tr);
+    }
+  
+    /**
+     * Saves sales options to the server and provides feedback.
+     */
+    function saveSalesOptions() {
+      // Collect sales options
+      const salesOptionsTable = document.getElementById('salesOptionsTableAdmin');
+      const salesOptionRows = salesOptionsTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+      const numbers = [];
+      const names = [];
+      const costs = [];
+      const sellingPrices = [];
+      
+      for (let i = 0; i < salesOptionRows.length; i++) {
+        const numberInput = salesOptionRows[i].cells[0].getElementsByTagName('input')[0];
+        const nameInput = salesOptionRows[i].cells[1].getElementsByTagName('input')[0];
+        const costInput = salesOptionRows[i].cells[2].getElementsByTagName('input')[0];
+        const sellingPriceInput = salesOptionRows[i].cells[3].getElementsByTagName('input')[0];
+        
+        const number = parseInt(numberInput.value, 10);
+        const name = nameInput.value.trim();
+        const cost = parseFloat(costInput.value);
+        const sellingPrice = parseFloat(sellingPriceInput.value);
+        
+        if (isNaN(number) || number <= 0) {
+          alert(`Invalid number in Sales Option row ${i + 1}. Please enter a positive integer.`);
+          return;
+        }
+        if (!name) {
+          alert(`Invalid name in Sales Option row ${i + 1}. Please enter a non-empty name.`);
+          return;
+        }
+        if (isNaN(cost) || cost < 0) {
+          alert(`Invalid cost in Sales Option row ${i + 1}. Please enter a non-negative number.`);
+          return;
+        }
+        if (isNaN(sellingPrice) || sellingPrice < 0) {
+          alert(`Invalid selling price in Sales Option row ${i + 1}. Please enter a non-negative number.`);
+          return;
+        }
+        
+        numbers.push(number);
+        names.push(name);
+        costs.push(cost);
+        sellingPrices.push(sellingPrice);
+      }
+      
+      // Save sales options to server
+      google.script.run
+        .withSuccessHandler(function() {
+          document.getElementById('successMessage').textContent = 'Sales Options saved successfully!';
+          document.getElementById('successMessage').style.display = 'block';
+          setTimeout(() => {
+            document.getElementById('successMessage').style.display = 'none';
+          }, 3000);
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error saving sales options:', error);
+          alert('An error occurred while saving sales options. Please try again.');
+        })
+        .saveSalesOptions({ numbers, names, costs, sellingPrices });
+    }
+  
+    /**
+     * Handles unlocking a user by User ID.
+     */
+    function adminUnlockUser() {
+      const userToUnlock = document.getElementById('unlockUserId').value.trim();
+      if (!userToUnlock) {
+        alert('Please enter a User ID.');
+        return;
+      }
+      
+      google.script.run
+        .withSuccessHandler(function() {
+          document.getElementById('unlockSuccess').style.display = 'block';
+          document.getElementById('unlockError').style.display = 'none';
+          document.getElementById('unlockUserId').value = '';
+          // Optionally, hide the success message after a delay
+          setTimeout(() => {
+            document.getElementById('unlockSuccess').style.display = 'none';
+          }, 3000);
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error unlocking User ID:', error);
+          document.getElementById('unlockError').style.display = 'block';
+          document.getElementById('unlockSuccess').style.display = 'none';
+        })
+        .unlockUser(userToUnlock);
+    }
+  
+    /**
+     * Shows the Unlock Section in the Admin Modal.
+     */
+    function showUnlockSection() {
+      document.getElementById('settingsSection').style.display = 'none';
+      document.getElementById('unlockSection').style.display = 'block';
+    }
+  
+    /**
+     * Handles the keyboard shortcut for opening the Admin Modal.
+     * Changed from Ctrl + B to Ctrl + Shift + B to avoid browser conflicts.
+     */
+    document.addEventListener('keydown', function (event) {
+      // Use Ctrl + Shift + B instead of Ctrl + B
+      if (event.ctrlKey && event.shiftKey && (event.key === 'B' || event.key === 'b')) {
+        event.preventDefault();
+        openAdminModal();
+        console.log('Admin Modal opened via Ctrl + Shift + B');
+      }
+    });
+  
+    /**
+     * Closes the Admin Modal when clicking outside of the modal content.
+     */
+    window.onclick = function(event) {
+      const modal = document.getElementById('adminModal');
+      if (event.target == modal) {
+        closeAdminModal();
+      }
+    }
+  
+    /**
+     * Opens the Admin Modal.
+     */
+    function openAdminModal() {
+      const modal = document.getElementById('adminModal');
+      modal.style.display = 'block';
+    }
+  
+    /**
+     * Closes the Admin Modal.
+     */
+    function closeAdminModal() {
+      const modal = document.getElementById('adminModal');
+      modal.style.display = 'none';
+      resetAdminModal();
+    }
+  
+    /**
+     * Resets the Admin Modal to its initial state.
+     */
+    function resetAdminModal() {
+      document.getElementById('loginSection').style.display = 'block';
+      document.getElementById('settingsSection').style.display = 'none';
+      document.getElementById('unlockSection').style.display = 'none';
+      document.getElementById('adminError').style.display = 'none';
+      document.getElementById('adminPassword').value = '';
+      document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0].innerHTML = '';
+      document.getElementById('successMessage').style.display = 'none';
+      document.getElementById('unlockSuccess').style.display = 'none';
+      document.getElementById('unlockError').style.display = 'none';
+    }
+  
+    /**
+     * Validates the admin password.
+     */
+    function validateAdmin() {
+      const password = document.getElementById('adminPassword').value;
+      if (!password) {
+        alert('Please enter the admin password.');
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(isValid) {
+          if (isValid) {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('settingsSection').style.display = 'block';
+            document.getElementById('unlockSection').style.display = 'none';
+            loadAdminSettings();
+          } else {
+            document.getElementById('adminError').style.display = 'block';
+          }
+        })
+        .validateAdminPassword(password);
+    }
+  
+    /**
+     * Loads existing sales options and populates the table in Admin Panel.
+     */
+    function loadAdminSettings() {
+      google.script.run
+        .withSuccessHandler(function(salesOptionsData) {
+          loadSalesOptionsAdmin(salesOptionsData);
+        })
+        .getSalesOptions();
+    }
+  
+    /**
+     * Loads sales options into the sales options table in Admin Panel.
+     * @param {Array} salesOptionsData - Array of sales options.
+     */
+    function loadSalesOptionsAdmin(salesOptionsData) {
+      const tableBody = document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0];
+      tableBody.innerHTML = ''; // Clear existing rows
+      
+      salesOptionsData.forEach(option => {
+        addSalesOptionRowAdmin(option.number, option.name, option.cost, option.sellingPrice);
+      });
+    }
+  
+    /**
+     * Adds a sales option row to the sales options table in Admin Panel with editable fields.
+     * @param {number} number - The option number.
+     * @param {string} name - The product name.
+     * @param {number} cost - The cost of the product.
+     * @param {number} sellingPrice - The selling price of the product.
+     */
+    function addSalesOptionRowAdmin(number = '', name = '', cost = '', sellingPrice = '') {
+      const tableBody = document.getElementById('salesOptionsTableAdmin').getElementsByTagName('tbody')[0];
+      const tr = document.createElement('tr');
+      
+      // Number Cell (Editable)
+      const numberTd = document.createElement('td');
+      const numberInput = document.createElement('input');
+      numberInput.type = 'number';
+      numberInput.min = '1';
+      numberInput.step = '1';
+      numberInput.value = number;
+      numberInput.required = true;
+      numberTd.appendChild(numberInput);
+      tr.appendChild(numberTd);
+      
+      // Name Cell (Editable)
+      const nameTd = document.createElement('td');
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = name;
+      nameInput.required = true;
+      nameTd.appendChild(nameInput);
+      tr.appendChild(nameTd);
+      
+      // Cost Cell (Editable)
+      const costTd = document.createElement('td');
+      const costInput = document.createElement('input');
+      costInput.type = 'number';
+      costInput.min = '0';
+      costInput.step = '0.01';
+      costInput.value = cost;
+      costInput.required = true;
+      costTd.appendChild(costInput);
+      tr.appendChild(costTd);
+      
+      // Selling Price Cell (Editable)
+      const sellingPriceTd = document.createElement('td');
+      const sellingPriceInput = document.createElement('input');
+      sellingPriceInput.type = 'number';
+      sellingPriceInput.min = '0';
+      sellingPriceInput.step = '0.01';
+      sellingPriceInput.value = sellingPrice;
+      sellingPriceInput.required = true;
+      sellingPriceTd.appendChild(sellingPriceInput);
+      tr.appendChild(sellingPriceTd);
+      
+      // Actions Cell
+      const actionsTd = document.createElement('td');
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.onclick = function() {
+        if (confirm('Are you sure you want to delete this sales option?')) {
+          tableBody.removeChild(tr);
+        }
+      };
+      actionsTd.appendChild(deleteBtn);
+      tr.appendChild(actionsTd);
+      
+      tableBody.appendChild(tr);
+    }
+  
+    /**
+     * Saves sales options to the server and provides feedback.
+     */
+    function saveSalesOptions() {
+      // Collect sales options
+      const salesOptionsTable = document.getElementById('salesOptionsTableAdmin');
+      const salesOptionRows = salesOptionsTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+      const numbers = [];
+      const names = [];
+      const costs = [];
+      const sellingPrices = [];
+      
+      for (let i = 0; i < salesOptionRows.length; i++) {
+        const numberInput = salesOptionRows[i].cells[0].getElementsByTagName('input')[0];
+        const nameInput = salesOptionRows[i].cells[1].getElementsByTagName('input')[0];
+        const costInput = salesOptionRows[i].cells[2].getElementsByTagName('input')[0];
+        const sellingPriceInput = salesOptionRows[i].cells[3].getElementsByTagName('input')[0];
+        
+        const number = parseInt(numberInput.value, 10);
+        const name = nameInput.value.trim();
+        const cost = parseFloat(costInput.value);
+        const sellingPrice = parseFloat(sellingPriceInput.value);
+        
+        if (isNaN(number) || number <= 0) {
+          alert(`Invalid number in Sales Option row ${i + 1}. Please enter a positive integer.`);
+          return;
+        }
+        if (!name) {
+          alert(`Invalid name in Sales Option row ${i + 1}. Please enter a non-empty name.`);
+          return;
+        }
+        if (isNaN(cost) || cost < 0) {
+          alert(`Invalid cost in Sales Option row ${i + 1}. Please enter a non-negative number.`);
+          return;
+        }
+        if (isNaN(sellingPrice) || sellingPrice < 0) {
+          alert(`Invalid selling price in Sales Option row ${i + 1}. Please enter a non-negative number.`);
+          return;
+        }
+        
+        numbers.push(number);
+        names.push(name);
+        costs.push(cost);
+        sellingPrices.push(sellingPrice);
+      }
+      
+      // Save sales options to server
+      google.script.run
+        .withSuccessHandler(function() {
+          document.getElementById('successMessage').textContent = 'Sales Options saved successfully!';
+          document.getElementById('successMessage').style.display = 'block';
+          setTimeout(() => {
+            document.getElementById('successMessage').style.display = 'none';
+          }, 3000);
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error saving sales options:', error);
+          alert('An error occurred while saving sales options. Please try again.');
+        })
+        .saveSalesOptions({ numbers, names, costs, sellingPrices });
+    }
+  
+    /**
+     * Handles unlocking a user by User ID.
+     */
+    function adminUnlockUser() {
+      const userToUnlock = document.getElementById('unlockUserId').value.trim();
+      if (!userToUnlock) {
+        alert('Please enter a User ID.');
+        return;
+      }
+      
+      google.script.run
+        .withSuccessHandler(function() {
+          document.getElementById('unlockSuccess').style.display = 'block';
+          document.getElementById('unlockError').style.display = 'none';
+          document.getElementById('unlockUserId').value = '';
+          // Optionally, hide the success message after a delay
+          setTimeout(() => {
+            document.getElementById('unlockSuccess').style.display = 'none';
+          }, 3000);
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error unlocking User ID:', error);
+          document.getElementById('unlockError').style.display = 'block';
+          document.getElementById('unlockSuccess').style.display = 'none';
+        })
+        .unlockUser(userToUnlock);
+    }
+  
+    /**
+     * Shows the Unlock Section in the Admin Modal.
+     */
+    function showUnlockSection() {
+      document.getElementById('settingsSection').style.display = 'none';
+      document.getElementById('unlockSection').style.display = 'block';
+    }
+  
+    /**
+     * Handles the keyboard shortcut for opening the Admin Modal.
+     * Changed from Ctrl + B to Ctrl + Shift + B to avoid browser conflicts.
+     */
+    document.addEventListener('keydown', function (event) {
+      // Use Ctrl + Shift + B instead of Ctrl + B
+      if (event.ctrlKey && event.shiftKey && (event.key === 'B' || event.key === 'b')) {
+        event.preventDefault();
+        openAdminModal();
+        console.log('Admin Modal opened via Ctrl + Shift + B');
+      }
+    });
+  
+    /**
+     * Closes the Admin Modal when clicking outside of the modal content.
+     */
+    window.onclick = function(event) {
+      const modal = document.getElementById('adminModal');
+      if (event.target == modal) {
+        closeAdminModal();
+      }
+    }
+  </script>
+  
+  <!-- Initialize the UI -->
+  <script>
+    /**
+     * Initializes the UI by fetching sales options from the server.
+     */
+    initialize();
   </script>
 </body>
 </html>
